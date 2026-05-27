@@ -1,0 +1,7 @@
+{
+  "name": "myAnti-AIGC",
+  "description": "降低中文学术论文 AIGC 检测率的专项 skill。支持期刊论文、毕业论文、研究报告等通用学术写作场景。当用户提到降AIGC率、去AI味、人工润色、humanize、论文降重、AI痕迹消除时触发。",
+  "author": {
+    "name": "Custom"
+  }
+}
