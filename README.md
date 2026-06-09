@@ -82,12 +82,20 @@ Claude Code 会自动加载 skill 并执行三步流程：
 
 ### 2. 手动运行扫描脚本
 
+支持 `.txt`、`.pdf`、`.docx` 三种格式。PDF 自动按页提取文本并追踪页码，DOCX 通过检测分页符确定页码。
+
 ```bash
 # 中文扫描（默认）
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt
 
 # 英文扫描
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --lang en
+
+# 扫描 PDF（自动按页提取，报告中标注页码）
+python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.pdf
+
+# 扫描 DOCX（检测分页符，报告中标注页码）
+python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.docx
 
 # JSON 输出（便于程序处理）
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --json
@@ -123,9 +131,12 @@ python skills/myAnti-AIGC/scripts/aigc_scan.py --compare before.txt after.txt --
   AI高频词         ██████░░░░  60.0  6.2/千字
 
   [!] 高风险段落 (3 个):
-  [H] 第1段: 模板词2处, AI高频词3处
-  [M] 第3段: 句长过于均匀(CV=0.22)
-  [H] 第7段: 模板词3处, 段末总结「综上所述」
+  [H] 第1段 (P1): 模板词2处, AI高频词3处
+     | 随着人工智能技术的快速发展，自然语言处理领域取得了显著...
+  [M] 第3段 (P1): 句长过于均匀(CV=0.22)
+     | 本文采用深度学习方法进行实验，实验结果表明该方法具有良...
+  [H] 第7段 (P2): 模板词3处, 段末总结「综上所述」
+     | 综上所述，本研究具有重要的理论价值与现实意义...
 
   建议: 需要局部修改。重点处理高风险段落。
 ```

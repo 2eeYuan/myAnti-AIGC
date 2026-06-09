@@ -49,8 +49,9 @@ description: |
 
 - 列出高风险段落位置（第几段）及命中的模式编号
 - 标注硬约束命中情况（见下方「强制硬约束」）
-- 运行扫描脚本：`python3 <skill-dir>/scripts/aigc_scan.py <file.txt>`
-- 保存扫描结果 JSON，第三步用于对比：`python3 <skill-dir>/scripts/aigc_scan.py <file.txt> --json > /tmp/before_scan.json`
+- 运行扫描脚本（支持 .txt/.pdf/.docx）：`python3 <skill-dir>/scripts/aigc_scan.py <file>`
+- PDF 自动按页提取文本，DOCX 检测分页符，报告中标注页码
+- 保存扫描结果 JSON，第三步用于对比：`python3 <skill-dir>/scripts/aigc_scan.py <file> --json > /tmp/before_scan.json`
 
 ### 第二步：等用户确认后输出改写版本
 
@@ -438,4 +439,4 @@ python3 <skill-dir>/scripts/aigc_scan.py --compare <before.txt> <after.txt> --la
 - `references/en-replacement-tables.md` — English replacement tables + AI word lists (3-tier)
 
 ### 工具
-- `scripts/aigc_scan.py` — 自动化扫描脚本（8 维度，支持 `--lang zh|en` 和 `--compare`）
+- `scripts/aigc_scan.py` — 自动化扫描脚本（8 维度，支持 `--lang zh|en`、`--compare`、.txt/.pdf/.docx 格式、页码追踪）

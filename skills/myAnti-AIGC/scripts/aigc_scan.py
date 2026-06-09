@@ -156,19 +156,146 @@ AI_HIGH_FREQ_WORDS_EN = [
 FULLWIDTH_PUNCT = set('，。！？；：、""''（）【】《》')
 
 
-def load_text(filepath: str) -> str:
-    """读取文本文件"""
+def load_text(filepath: str) -> tuple[str, list[dict]]:
+    """读取文件，返回 (全文文本, 页面列表)。
+    页面列表: [{"page": 1, "text": "..."}, ...]
+    PDF/DOCX 按页提取，TXT 视为单页。
+    """
     path = Path(filepath)
     if not path.exists():
         print(f"错误: 文件不存在 — {filepath}", file=sys.stderr)
         sys.exit(1)
-    return path.read_text(encoding='utf-8')
+
+    ext = path.suffix.lower()
+
+    if ext == '.pdf':
+        return _load_pdf(path)
+    elif ext in ('.docx', '.doc'):
+        return _load_docx(path)
+    else:
+        # Plain text — treat as single page
+        text = path.read_text(encoding='utf-8', errors='replace')
+        return text, [{"page": 1, "text": text}]
 
 
-def split_paragraphs(text: str) -> list[str]:
-    """按段落分割"""
-    paragraphs = re.split(r'\n\s*\n', text.strip())
-    return [p.strip() for p in paragraphs if p.strip()]
+def _load_pdf(path: Path) -> tuple[str, list[dict]]:
+    """提取 PDF 文本，按页分割"""
+    try:
+        import pdfplumber
+    except ImportError:
+        print("错误: 需要安装 pdfplumber — pip install pdfplumber", file=sys.stderr)
+        sys.exit(1)
+
+    pages = []
+    all_text = []
+    with pdfplumber.open(str(path)) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text() or ""
+            if text.strip():
+                pages.append({"page": i, "text": text.strip()})
+                all_text.append(text.strip())
+
+    if not pages:
+        print("警告: PDF 未提取到文本（可能是扫描件/图片 PDF）", file=sys.stderr)
+
+    full_text = "\n\n".join(all_text)
+    return full_text, pages
+
+
+def _load_docx(path: Path) -> tuple[str, list[dict]]:
+    """提取 DOCX 文本，检测分页符划分页面"""
+    try:
+        import docx
+        from docx.oxml.ns import qn
+    except ImportError:
+        print("错误: 需要安装 python-docx — pip install python-docx", file=sys.stderr)
+        sys.exit(1)
+
+    doc = docx.Document(str(path))
+
+    # 按分页符拆分页面
+    pages = []
+    current_page_num = 1
+    current_text = []
+
+    for para in doc.paragraphs:
+        # 先检查分页符（包括空段落中的分页符）
+        has_page_break = False
+        for run in para.runs:
+            for br in run._element.findall(qn('w:br')):
+                if br.get(qn('w:type')) == 'page':
+                    has_page_break = True
+                    break
+
+        pPr = para._element.find(qn('w:pPr'))
+        if pPr is not None:
+            for child in pPr:
+                if child.tag == qn('w:pageBreakBefore'):
+                    has_page_break = True
+                    break
+
+        if has_page_break and current_text:
+            pages.append({"page": current_page_num, "text": "\n\n".join(current_text)})
+            current_page_num += 1
+            current_text = []
+
+        text = para.text.strip()
+        if not text:
+            continue
+
+        current_text.append(text)
+
+    # 最后一页
+    if current_text:
+        pages.append({"page": current_page_num, "text": "\n\n".join(current_text)})
+
+    if not pages:
+        pages = [{"page": 1, "text": ""}]
+
+    full_text = "\n\n".join(p["text"] for p in pages)
+    return full_text, pages
+
+
+def split_paragraphs(text: str, pages: list[dict] = None) -> list[dict]:
+    """按段落分割，返回带页码信息的段落列表。
+    返回: [{"text": "...", "page": 1, "index": 1}, ...]
+    """
+    raw_paragraphs = re.split(r'\n\s*\n', text.strip())
+    raw_paragraphs = [p.strip() for p in raw_paragraphs if p.strip()]
+
+    if pages is None:
+        return [{"text": p, "page": 1, "index": i + 1}
+                for i, p in enumerate(raw_paragraphs)]
+
+    # 根据字符偏移量推算每个段落所在的页码
+    # 构建页码边界表: [(cumulative_char_offset, page_number), ...]
+    page_boundaries = []
+    cumulative = 0
+    for pg in pages:
+        pg_text = pg["text"]
+        cumulative += len(pg_text) + 2  # +2 for \n\n separator
+        page_boundaries.append((cumulative, pg["page"]))
+
+    result = []
+    offset = 0
+    for i, para_text in enumerate(raw_paragraphs):
+        # 找到该段落所在的页码
+        page_num = 1
+        for boundary, pg_num in page_boundaries:
+            if offset < boundary:
+                page_num = pg_num
+                break
+        else:
+            page_num = page_boundaries[-1][1] if page_boundaries else 1
+
+        result.append({
+            "text": para_text,
+            "page": page_num,
+            "index": i + 1,
+        })
+        offset += len(para_text) + 2  # +2 for \n\n
+
+    return result
 
 
 def split_sentences(text: str) -> list[str]:
@@ -338,8 +465,12 @@ def scan_passive_voice(text: str, lang: str = 'zh') -> dict:
 
 
 # ─── 维度 6: 段落长度对称性 ───
-def scan_paragraph_symmetry(paragraphs: list[str]) -> dict:
-    lengths = [count_chars(p) for p in paragraphs]
+def scan_paragraph_symmetry(paragraphs: list) -> dict:
+    """paragraphs: list of str or list of dict with 'text' key"""
+    if paragraphs and isinstance(paragraphs[0], dict):
+        lengths = [count_chars(p["text"]) for p in paragraphs]
+    else:
+        lengths = [count_chars(p) for p in paragraphs]
 
     if len(lengths) < 3:
         return {"score": 0, "cv": 0, "std": 0, "mean": 0}
@@ -460,8 +591,8 @@ def compute_overall_score(dimensions: dict) -> float:
     return round(total, 1)
 
 
-def identify_high_risk_paragraphs(paragraphs: list[str], lang: str = 'zh') -> list[dict]:
-    """识别高风险段落"""
+def identify_high_risk_paragraphs(paragraphs: list, lang: str = 'zh') -> list[dict]:
+    """识别高风险段落。paragraphs: list of dict with 'text', 'page', 'index'"""
     template_pats = TEMPLATE_PATTERNS_EN if lang == 'en' else TEMPLATE_PATTERNS
     summary_words_en = ['In conclusion', 'To summarize', 'In summary', 'Overall,', 'In closing']
     summary_words_zh = ['综上所述', '由此可见', '总而言之', '不难发现', '可以看出']
@@ -473,8 +604,18 @@ def identify_high_risk_paragraphs(paragraphs: list[str], lang: str = 'zh') -> li
 
     risks = []
     for i, para in enumerate(paragraphs):
+        # 支持 dict 和 str 两种格式
+        if isinstance(para, dict):
+            para_text = para["text"]
+            page_num = para.get("page", 1)
+            para_idx = para.get("index", i + 1)
+        else:
+            para_text = para
+            page_num = 1
+            para_idx = i + 1
+
         reasons = []
-        sentences = split_sentences(para)
+        sentences = split_sentences(para_text)
 
         # 检查模板词
         template_count = 0
@@ -495,7 +636,7 @@ def identify_high_risk_paragraphs(paragraphs: list[str], lang: str = 'zh') -> li
                 reasons.append(f"{label_cv}(CV={cv:.2f})")
 
         # 检查三元并列
-        if re.search(r'[：:]\s*.+?[；;]\s*.+?[；;]', para):
+        if re.search(r'[：:]\s*.+?[；;]\s*.+?[；;]', para_text):
             label_colon = "colon-list structure" if lang == 'en' else "冒号并列结构"
             reasons.append(label_colon)
 
@@ -510,14 +651,16 @@ def identify_high_risk_paragraphs(paragraphs: list[str], lang: str = 'zh') -> li
         ai_word_count = 0
         flags = re.IGNORECASE if lang == 'en' else 0
         for word in ai_words:
-            ai_word_count += len(re.findall(word, para, flags))
+            ai_word_count += len(re.findall(word, para_text, flags))
         if ai_word_count >= 3:
             reasons.append(f"{label_ai} x{ai_word_count}")
 
         if reasons:
             risks.append({
-                "paragraph": i + 1,
-                "preview": para[:80] + "..." if len(para) > 80 else para,
+                "paragraph": para_idx,
+                "page": page_num,
+                "preview": para_text[:100] + "..." if len(para_text) > 100 else para_text,
+                "full_text": para_text,
                 "reasons": reasons,
                 "risk_level": "high" if len(reasons) >= 3 else "medium"
             })
@@ -558,8 +701,8 @@ def main():
 
 def scan_single(filepath: str, lang: str = 'zh') -> dict:
     """扫描单个文件，返回结果字典"""
-    text = load_text(filepath)
-    paragraphs = split_paragraphs(text)
+    text, pages = load_text(filepath)
+    paragraphs = split_paragraphs(text, pages)
     all_sentences = split_sentences(text)
 
     dimensions = {
@@ -686,8 +829,15 @@ def print_single_report(result: dict, lang: str = 'zh'):
         print(f"  {'-'*50}")
         for risk in high_risk:
             level = "[H]" if risk["risk_level"] == "high" else "[M]"
-            print(f"  {level} {L['para_unit']}{risk['paragraph']}: {', '.join(risk['reasons'])}")
-            print(f"     {risk['preview'][:60]}...")
+            page_info = f" (P{risk['page']})" if risk.get('page') else ""
+            print(f"  {level} {L['para_unit']}{risk['paragraph']}{page_info}: {', '.join(risk['reasons'])}")
+            # 显示原文片段，标注问题位置
+            preview = risk.get('preview', risk.get('full_text', ''))[:120]
+            print(f"     | {preview}")
+            # 如果有完整文本且较长，显示截断提示
+            full = risk.get('full_text', '')
+            if len(full) > 120:
+                print(f"     | ...({len(full)} chars total)")
     else:
         print(f"\n  [OK] {L['no_risk']}")
 

@@ -81,12 +81,20 @@ Claude Code will automatically load the skill and execute a 3-step workflow:
 
 ### 2. Manual Scanning
 
+Supports `.txt`, `.pdf`, and `.docx` formats. PDF text is extracted page-by-page with page tracking. DOCX detects page breaks for page boundaries.
+
 ```bash
 # Chinese scan (default)
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt
 
 # English scan
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --lang en
+
+# Scan PDF (auto-extracts text per page, reports page numbers)
+python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.pdf
+
+# Scan DOCX (detects page breaks, reports page numbers)
+python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.docx
 
 # JSON output (for programmatic use)
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --json
@@ -122,9 +130,12 @@ Scan output example:
   AI High-Freq Words ██████░░░░  60.0  6.2/1000 chars
 
   [!] High-Risk Paragraphs (3):
-  [H] Para 1: 2 template phrases, 3 AI high-freq words
-  [M] Para 3: Uniform sentence length (CV=0.22)
-  [H] Para 7: 3 template phrases, summary "综上所述"
+  [H] Para 1 (P1): template phrase x2, AI high-freq word x3
+     | With the rapid development of AI technology, NLP has made...
+  [M] Para 3 (P1): uniform sentence length (CV=0.22)
+     | This study employs deep learning methods for experiments...
+  [H] Para 7 (P2): template phrase x3, concluding cliche "综上所述"
+     | In conclusion, this research has important theoretical value...
 
   Recommendation: Partial revision needed. Focus on high-risk paragraphs.
 ```
