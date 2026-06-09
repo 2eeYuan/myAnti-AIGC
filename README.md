@@ -1,5 +1,7 @@
 # myAnti-AIGC
 
+[English](README_EN.md) | 中文
+
 降低中文学术论文 AIGC 检测率的 Claude Code Skill。
 
 基于三个热门开源项目（[aigc-reduce](https://github.com/ydyjya/aigc-reduce)、[humanizer-zh-academic](https://github.com/CJayWong/humanizer-zh-academic)、[thesis-creator](https://github.com/GrammarSense/thesis-creator)）的核心方法论合并而成，针对中文学术写作场景做了整合与优化。
@@ -69,9 +71,10 @@ your-project/
 > 去AI味，这是我的论文第三章
 ```
 
-Claude Code 会自动加载 skill 并执行两步流程：
+Claude Code 会自动加载 skill 并执行三步流程：
 1. **风险识别报告** — 扫描并列出高风险段落和命中模式
 2. **改写** — 用户确认后输出改写版本
+3. **改写后验证** — 自动再扫描一遍，输出前后对比报告，直到风险降至低水平
 
 ### 2. 手动运行扫描脚本
 
@@ -84,6 +87,9 @@ python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --json
 
 # 自定义风险阈值（默认 50）
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --threshold 60
+
+# 改写前后对比（核心功能）
+python skills/myAnti-AIGC/scripts/aigc_scan.py --compare 原文.txt 改写后.txt
 ```
 
 扫描输出示例：
@@ -115,6 +121,49 @@ python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --threshold 60
   [H] 第7段: 模板词3处, 段末总结「综上所述」
 
   建议: 需要局部修改。重点处理高风险段落。
+```
+
+### 3. 改写前后对比
+
+改写完成后，用 `--compare` 模式验证效果：
+
+```bash
+python skills/myAnti-AIGC/scripts/aigc_scan.py --compare 原文.txt 改写后.txt
+```
+
+对比报告示例：
+
+```
+================================================================
+  AIGC 改写前后对比报告
+================================================================
+
+  改写前: before.txt
+    段落: 3  句子: 9  字数: 198
+  改写后: after.txt
+    段落: 4  句子: 13  字数: 264
+  字数变化: +66 (+33.3%)
+
+  ================================================================
+  综合风险评分
+  ================================================================
+  改写前: 56.3/100 (medium)
+  改写后: 19.5/100 (low)
+  变化:   -36.8 [v]
+  >>> 明显改善
+
+  ================================================================
+  各维度对比
+  ================================================================
+  维度                改写前  改写后  变化  趋势
+  ------------------------------------------------------------
+  模板句式密度         66.7    0.0  -66.7 v
+  句长均匀度           60.0   60.0    0.0 =
+  段落对称性           80.0   50.0  -30.0 v
+  模糊表述             40.0    0.0  -40.0 v
+  AI高频词           100.0    0.0 -100.0 v
+
+  结论: 改写效果良好，风险等级降至低风险。
 ```
 
 ## Skill 核心方法论
@@ -180,7 +229,7 @@ myAnti-AIGC/
 | `ai-patterns.md` | AI 写作特征的识别与改写指南 | 审计阶段按需读取 |
 | `replacement-tables.md` | 替换操作的详细规则和词表 | 第一轮替换时按需读取 |
 | `detection-principles.md` | 知网/万方/GPTZero 等检测器的技术原理 | 了解检测逻辑时按需读取 |
-| `aigc_scan.py` | 自动化扫描工具，输出 8 维度风险报告 | SKILL.md 指令触发时执行 |
+| `aigc_scan.py` | 自动化扫描工具，支持单文件扫描和改写前后对比 | SKILL.md 指令触发时执行 |
 
 ## 扫描维度说明
 
