@@ -12,7 +12,9 @@ AIGC 特征扫描器 — 检测学术论文中的 AI 生成痕迹
   7. 模糊表述密度
   8. 标点符号规律性
 
-用法: python aigc_scan.py <file.txt> [--json] [--threshold 0.5]
+用法:
+  python aigc_scan.py <file.txt> [--json] [--threshold 50]
+  python aigc_scan.py --compare <before.txt> <after.txt>  # 改写前后对比
 """
 
 import re
@@ -432,13 +434,30 @@ def main():
     parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
     parser.add_argument('--threshold', type=float, default=50.0,
                         help='风险阈值（0-100，默认50）')
+    parser.add_argument('--compare', metavar='BEFORE',
+                        help='改写前文件路径，输出前后对比报告')
     args = parser.parse_args()
 
-    text = load_text(args.file)
+    # ─── 对比模式 ───
+    if args.compare:
+        run_compare(args.compare, args.file, args.json)
+        return
+
+    # ─── 单文件扫描模式 ───
+    result = scan_single(args.file)
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print_single_report(result)
+
+
+def scan_single(filepath: str) -> dict:
+    """扫描单个文件，返回结果字典"""
+    text = load_text(filepath)
     paragraphs = split_paragraphs(text)
     all_sentences = split_sentences(text)
 
-    # 运行所有维度扫描
     dimensions = {
         "template_patterns": scan_template_patterns(text),
         "burstiness": scan_burstiness(text),
@@ -453,8 +472,8 @@ def main():
     overall_score = compute_overall_score(dimensions)
     high_risk = identify_high_risk_paragraphs(paragraphs)
 
-    result = {
-        "file": str(args.file),
+    return {
+        "file": str(filepath),
         "overall_score": overall_score,
         "risk_level": "high" if overall_score >= 70 else "medium" if overall_score >= 40 else "low",
         "total_paragraphs": len(paragraphs),
@@ -465,72 +484,210 @@ def main():
         "high_risk_count": len(high_risk),
     }
 
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print(f"\n{'='*60}")
-        print(f"  AIGC 特征扫描报告")
-        print(f"{'='*60}")
-        print(f"  文件: {args.file}")
-        print(f"  段落数: {len(paragraphs)}  |  句子数: {len(all_sentences)}  |  字数: {count_chars(text)}")
-        print(f"{'='*60}")
 
-        # 综合评分
-        risk_emoji = "[HIGH]" if result["risk_level"] == "high" else "[MED]" if result["risk_level"] == "medium" else "[LOW]"
-        print(f"\n  {risk_emoji} 综合风险评分: {overall_score}/100 ({result['risk_level']})")
+def print_single_report(result: dict):
+    """打印单文件扫描报告"""
+    print(f"\n{'='*60}")
+    print(f"  AIGC 特征扫描报告")
+    print(f"{'='*60}")
+    print(f"  文件: {result['file']}")
+    print(f"  段落数: {result['total_paragraphs']}  |  句子数: {result['total_sentences']}  |  字数: {result['total_chars']}")
+    print(f"{'='*60}")
 
-        # 各维度得分
-        print(f"\n  {'维度':<20} {'得分':>6} {'详情'}")
+    risk_emoji = "[HIGH]" if result["risk_level"] == "high" else "[MED]" if result["risk_level"] == "medium" else "[LOW]"
+    print(f"\n  {risk_emoji} 综合风险评分: {result['overall_score']}/100 ({result['risk_level']})")
+
+    print(f"\n  {'维度':<20} {'得分':>6} {'详情'}")
+    print(f"  {'-'*50}")
+
+    dim_names = {
+        "template_patterns": "模板句式密度",
+        "burstiness": "句长均匀度",
+        "nested_numbers": "嵌套编号",
+        "colon_lists": "冒号并列",
+        "passive_voice": "被动语态",
+        "paragraph_symmetry": "段落对称性",
+        "vague_expressions": "模糊表述",
+        "ai_high_freq_words": "AI高频词",
+    }
+
+    dimensions = result["dimensions"]
+    for dim_key, dim_name in dim_names.items():
+        dim = dimensions[dim_key]
+        score = dim.get("score", 0)
+        bar = "█" * int(score / 10) + "░" * (10 - int(score / 10))
+
+        extra = ""
+        if dim_key == "burstiness":
+            extra = f"CV={dim.get('cv', 0):.3f}"
+        elif dim_key == "template_patterns":
+            extra = f"{dim.get('count', 0)}/{dim.get('total', 0)}句"
+        elif dim_key == "ai_high_freq_words":
+            extra = f"{dim.get('density_per_1k', 0):.1f}/千字"
+        elif dim_key == "vague_expressions":
+            extra = f"{dim.get('count', 0)}处"
+
+        print(f"  {dim_name:<18} {bar} {score:>5.1f}  {extra}")
+
+    high_risk = result["high_risk_paragraphs"]
+    if high_risk:
+        print(f"\n  [!] 高风险段落 ({len(high_risk)} 个):")
         print(f"  {'-'*50}")
+        for risk in high_risk:
+            level = "[H]" if risk["risk_level"] == "high" else "[M]"
+            print(f"  {level} 第{risk['paragraph']}段: {', '.join(risk['reasons'])}")
+            print(f"     {risk['preview'][:60]}...")
+    else:
+        print(f"\n  [OK] 未发现高风险段落")
 
-        dim_names = {
-            "template_patterns": "模板句式密度",
-            "burstiness": "句长均匀度",
-            "nested_numbers": "嵌套编号",
-            "colon_lists": "冒号并列",
-            "passive_voice": "被动语态",
-            "paragraph_symmetry": "段落对称性",
-            "vague_expressions": "模糊表述",
-            "ai_high_freq_words": "AI高频词",
+    print(f"\n  {'='*60}")
+    overall = result["overall_score"]
+    if overall >= 70:
+        print("  建议: 需要深度改写。运行三轮降重协议。")
+    elif overall >= 40:
+        print("  建议: 需要局部修改。重点处理高风险段落。")
+    else:
+        print("  建议: 风险较低。可做轻度润色。")
+    print(f"  {'='*60}\n")
+
+
+def run_compare(before_path: str, after_path: str, as_json: bool):
+    """改写前后对比扫描"""
+    before = scan_single(before_path)
+    after = scan_single(after_path)
+
+    if as_json:
+        comparison = {
+            "before": before,
+            "after": after,
+            "delta": {
+                "overall_score": round(after["overall_score"] - before["overall_score"], 1),
+                "high_risk_count": after["high_risk_count"] - before["high_risk_count"],
+                "char_diff": after["total_chars"] - before["total_chars"],
+            }
         }
+        print(json.dumps(comparison, ensure_ascii=False, indent=2))
+        return
 
-        for dim_key, dim_name in dim_names.items():
-            dim = dimensions[dim_key]
-            score = dim.get("score", 0)
-            bar = "█" * int(score / 10) + "░" * (10 - int(score / 10))
+    dim_names = {
+        "template_patterns": "模板句式密度",
+        "burstiness": "句长均匀度",
+        "nested_numbers": "嵌套编号",
+        "colon_lists": "冒号并列",
+        "passive_voice": "被动语态",
+        "paragraph_symmetry": "段落对称性",
+        "vague_expressions": "模糊表述",
+        "ai_high_freq_words": "AI高频词",
+    }
 
-            extra = ""
-            if dim_key == "burstiness":
-                extra = f"CV={dim.get('cv', 0):.3f}"
-            elif dim_key == "template_patterns":
-                extra = f"{dim.get('count', 0)}/{dim.get('total', 0)}句"
-            elif dim_key == "ai_high_freq_words":
-                extra = f"{dim.get('density_per_1k', 0):.1f}/千字"
-            elif dim_key == "vague_expressions":
-                extra = f"{dim.get('count', 0)}处"
+    print(f"\n{'='*64}")
+    print(f"  AIGC 改写前后对比报告")
+    print(f"{'='*64}")
 
-            print(f"  {dim_name:<18} {bar} {score:>5.1f}  {extra}")
+    # 基本信息
+    print(f"\n  改写前: {before_path}")
+    print(f"    段落: {before['total_paragraphs']}  句子: {before['total_sentences']}  字数: {before['total_chars']}")
+    print(f"  改写后: {after_path}")
+    print(f"    段落: {after['total_paragraphs']}  句子: {after['total_sentences']}  字数: {after['total_chars']}")
 
-        # 高风险段落
-        if high_risk:
-            print(f"\n  [!] 高风险段落 ({len(high_risk)} 个):")
-            print(f"  {'-'*50}")
-            for risk in high_risk:
-                level = "[H]" if risk["risk_level"] == "high" else "[M]"
-                print(f"  {level} 第{risk['paragraph']}段: {', '.join(risk['reasons'])}")
-                print(f"     {risk['preview'][:60]}...")
-        else:
-            print(f"\n  [OK] 未发现高风险段落")
+    char_diff = after['total_chars'] - before['total_chars']
+    char_pct = (char_diff / max(before['total_chars'], 1)) * 100
+    sign = "+" if char_diff >= 0 else ""
+    print(f"  字数变化: {sign}{char_diff} ({sign}{char_pct:.1f}%)")
 
-        # 建议
-        print(f"\n  {'='*60}")
-        if overall_score >= 70:
-            print("  建议: 需要深度改写。运行三轮降重协议。")
-        elif overall_score >= 40:
-            print("  建议: 需要局部修改。重点处理高风险段落。")
-        else:
-            print("  建议: 风险较低。可做轻度润色。")
-        print(f"  {'='*60}\n")
+    # 综合评分对比
+    b_score = before["overall_score"]
+    a_score = after["overall_score"]
+    delta = a_score - b_score
+    delta_sign = "+" if delta >= 0 else ""
+    arrow = "v" if delta < 0 else "^" if delta > 0 else "="
+
+    b_level = before["risk_level"]
+    a_level = after["risk_level"]
+
+    print(f"\n  {'='*64}")
+    print(f"  综合风险评分")
+    print(f"  {'='*64}")
+    print(f"  改写前: {b_score}/100 ({b_level})")
+    print(f"  改写后: {a_score}/100 ({a_level})")
+    print(f"  变化:   {delta_sign}{delta} [{arrow}]")
+
+    if delta < -10:
+        print(f"  >>> 明显改善")
+    elif delta < 0:
+        print(f"  >>> 有所改善")
+    elif delta == 0:
+        print(f"  >>> 无变化")
+    else:
+        print(f"  >>> 注意: 评分上升，可能需要重新检查改写策略")
+
+    # 各维度对比
+    print(f"\n  {'='*64}")
+    print(f"  各维度对比")
+    print(f"  {'='*64}")
+    print(f"  {'维度':<16} {'改写前':>8} {'改写后':>8} {'变化':>8} {'趋势'}")
+    print(f"  {'-'*60}")
+
+    for dim_key, dim_name in dim_names.items():
+        b_dim = before["dimensions"][dim_key]
+        a_dim = after["dimensions"][dim_key]
+        b_s = b_dim.get("score", 0)
+        a_s = a_dim.get("score", 0)
+        d = a_s - b_s
+        d_sign = "+" if d > 0 else "" if d == 0 else ""
+        trend = "v" if d < 0 else "^" if d > 0 else "="
+
+        # 附加信息
+        extra_before = ""
+        extra_after = ""
+        if dim_key == "burstiness":
+            extra_before = f"CV={b_dim.get('cv', 0):.3f}"
+            extra_after = f"CV={a_dim.get('cv', 0):.3f}"
+        elif dim_key == "template_patterns":
+            extra_before = f"{b_dim.get('count', 0)}处"
+            extra_after = f"{a_dim.get('count', 0)}处"
+        elif dim_key == "ai_high_freq_words":
+            extra_before = f"{b_dim.get('density_per_1k', 0):.1f}/千字"
+            extra_after = f"{a_dim.get('density_per_1k', 0):.1f}/千字"
+
+        print(f"  {dim_name:<14} {b_s:>6.1f}  {extra_before:>10}  {a_s:>6.1f}  {extra_after:>10}  {d_sign}{d} {trend}")
+
+    # 高风险段落变化
+    b_hr = before["high_risk_count"]
+    a_hr = after["high_risk_count"]
+    hr_delta = a_hr - b_hr
+
+    print(f"\n  {'='*64}")
+    print(f"  高风险段落")
+    print(f"  {'='*64}")
+    print(f"  改写前: {b_hr} 个高风险段落")
+    print(f"  改写后: {a_hr} 个高风险段落")
+
+    if hr_delta < 0:
+        print(f"  >>> 减少了 {abs(hr_delta)} 个高风险段落")
+    elif hr_delta > 0:
+        print(f"  >>> 注意: 增加了 {hr_delta} 个高风险段落")
+    else:
+        print(f"  >>> 高风险段落数量未变")
+
+    # 改写后仍存在的高风险段落
+    if after["high_risk_paragraphs"]:
+        print(f"\n  改写后仍需关注的段落:")
+        for risk in after["high_risk_paragraphs"]:
+            level = "[H]" if risk["risk_level"] == "high" else "[M]"
+            print(f"  {level} 第{risk['paragraph']}段: {', '.join(risk['reasons'])}")
+
+    # 总结
+    print(f"\n  {'='*64}")
+    if delta < -10 and a_score < 40:
+        print("  结论: 改写效果良好，风险等级降至低风险。")
+    elif delta < 0:
+        print("  结论: 改写有效果，建议对剩余高风险段落做针对性修改。")
+    elif delta == 0:
+        print("  结论: 风险评分无变化，建议调整改写策略后重试。")
+    else:
+        print("  结论: 风险评分上升，改写可能引入了新的 AI 模式，需要重新审视。")
+    print(f"  {'='*64}\n")
 
 
 if __name__ == '__main__':
