@@ -2,7 +2,7 @@
 
 English | [中文](README.md)
 
-A Claude Code Skill for reducing AIGC detection rates in Chinese academic papers.
+A Claude Code Skill for reducing AIGC detection rates in Chinese and English academic papers.
 
 Synthesized from three popular open-source projects ([aigc-reduce](https://github.com/ydyjya/aigc-reduce), [humanizer-zh-academic](https://github.com/CJayWong/humanizer-zh-academic), [thesis-creator](https://github.com/GrammarSense/thesis-creator)), optimized for Chinese academic writing scenarios.
 
@@ -15,7 +15,9 @@ Synthesized from three popular open-source projects ([aigc-reduce](https://githu
 | Research reports | Supported |
 | Academic blogs / commentaries | Supported |
 
-**Trigger words**: 降AIGC率, 去AI味, 人工润色, humanize, 论文降重, AI痕迹消除
+**Supported languages**: Chinese / English
+
+**Trigger words**: 降AIGC率, 去AI味, 人工润色, humanize, 论文降重, AI痕迹消除, reduce AI detection, academic humanizer, remove AI patterns, de-AI
 
 ## Installation
 
@@ -80,17 +82,20 @@ Claude Code will automatically load the skill and execute a 3-step workflow:
 ### 2. Manual Scanning
 
 ```bash
-# Basic usage
+# Chinese scan (default)
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt
+
+# English scan
+python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --lang en
 
 # JSON output (for programmatic use)
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --json
 
-# Custom risk threshold (default: 50)
-python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --threshold 60
-
-# Before/after comparison (core feature)
+# Before/after comparison
 python skills/myAnti-AIGC/scripts/aigc_scan.py --compare original.txt rewritten.txt
+
+# English before/after comparison
+python skills/myAnti-AIGC/scripts/aigc_scan.py --compare before.txt after.txt --lang en
 ```
 
 Scan output example:
@@ -210,13 +215,15 @@ myAnti-AIGC/
 │   └── plugin.json              ← Skill registration
 ├── skills/
 │   └── myAnti-AIGC/
-│       ├── SKILL.md             ← Core instructions
+│       ├── SKILL.md             ← Core instructions (bilingual)
 │       ├── references/
-│       │   ├── ai-patterns.md        ← 21 AI pattern library
-│       │   ├── replacement-tables.md ← Replacement tables + AI word lists
-│       │   └── detection-principles.md ← Detector principles (CNKI 3.0 / Wanfang / GPTZero)
+│       │   ├── ai-patterns.md        ← Chinese AI pattern library (21 patterns)
+│       │   ├── replacement-tables.md ← Chinese replacement tables + AI word lists
+│       │   ├── detection-principles.md ← Detector principles (CNKI 3.0 / Wanfang / GPTZero)
+│       │   ├── en-ai-patterns.md     ← English AI patterns (26 content + 49 structural)
+│       │   └── en-replacement-tables.md ← English replacement tables + 3-tier AI word lists
 │       └── scripts/
-│           └── aigc_scan.py     ← 8-dimension scanner with before/after comparison
+│           └── aigc_scan.py     ← 8-dimension scanner (zh/en + before/after comparison)
 ├── .gitignore
 ├── README.md
 └── README_EN.md
@@ -227,11 +234,13 @@ myAnti-AIGC/
 | File | Purpose | When Loaded |
 |------|---------|-------------|
 | `plugin.json` | Tells Claude Code a skill exists here | At system startup |
-| `SKILL.md` | Complete work manual: role, rules, workflow, strategies | When user triggers the skill |
-| `ai-patterns.md` | AI writing pattern identification and rewriting guide | On-demand during audit phase |
-| `replacement-tables.md` | Detailed replacement rules and word lists | On-demand during Round 1 |
+| `SKILL.md` | Complete work manual: role, rules, workflow, strategies (bilingual) | When user triggers the skill |
+| `ai-patterns.md` | Chinese AI writing pattern identification and rewriting guide | On-demand during Chinese audit |
+| `replacement-tables.md` | Chinese replacement rules and word lists | On-demand during Chinese Round 1 |
+| `en-ai-patterns.md` | English AI patterns (merged from 3 open-source projects) | On-demand during English audit |
+| `en-replacement-tables.md` | English replacement tables + 3-tier AI word lists + legitimate phrase whitelist | On-demand during English Round 1 |
 | `detection-principles.md` | How detectors work (CNKI / Wanfang / GPTZero) | On-demand for understanding detection logic |
-| `aigc_scan.py` | Automated scanner with single-file and comparison modes | Triggered by SKILL.md instructions |
+| `aigc_scan.py` | Automated scanner, `--lang zh\|en` + `--compare` | Triggered by SKILL.md instructions |
 
 ## Scan Dimensions
 
@@ -254,9 +263,15 @@ myAnti-AIGC/
 
 This skill's methodology is derived from the following open-source projects:
 
-- **[aigc-reduce](https://github.com/ydyjya/aigc-reduce)** (282 stars) — Deterministic replacement approach, three-round reduction protocol, aigc_scan.py scanner
-- **[humanizer-zh-academic](https://github.com/CJayWong/humanizer-zh-academic)** (156 stars) — AI pattern recognition, hard constraint system, noise preservation principles
-- **[thesis-creator](https://github.com/GrammarSense/thesis-creator)** (156 stars) — P0-P3 priority strategy, discipline adaptation matrix, idiom replacement
+**Chinese:**
+- **[aigc-reduce](https://github.com/ydyjya/aigc-reduce)** (282 stars) — Deterministic replacement, three-round protocol, scanner tool
+- **[humanizer-zh-academic](https://github.com/CJayWong/humanizer-zh-academic)** (156 stars) — AI pattern recognition, hard constraints, noise preservation
+- **[thesis-creator](https://github.com/GrammarSense/thesis-creator)** (156 stars) — P0-P3 priority, discipline adaptation, idiom replacement
+
+**English:**
+- **[humanizer_academic](https://github.com/matsuikentaro1/humanizer_academic)** (99 stars) — Medical/academic patterns, legitimate phrase whitelist
+- **[slopbuster](https://github.com/gabelul/slopbuster)** (16 stars) — 49 structural rules, multi-mode scanner, 10-point scoring
+- **[humanize-academic-writing](https://github.com/momo2young/humanize-academic-writing)** (14 stars) — Social science focus, rhythm engineering, specificity injection
 
 ## Limitations
 

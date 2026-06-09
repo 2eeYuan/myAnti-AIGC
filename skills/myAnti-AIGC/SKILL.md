@@ -1,11 +1,12 @@
 ---
 name: myAnti-AIGC
 description: |
-  降低中文学术论文 AIGC 检测率的专项 skill。
-  基于三个热门开源项目（aigc-reduce、humanizer-zh-academic、thesis-creator）的核心方法论合并而成。
+  降低中英文学术论文 AIGC 检测率的专项 skill。
+  基于多个热门开源项目的核心方法论合并而成。
   支持期刊论文、毕业论文、研究报告等通用学术写作场景。
   Use when the user asks to: 降低AI率、人工润色、降低AIGC、humanize、去AI味、
-  学术写作润色、论文降重、AIGC检测、AI痕迹消除、降低论文AI率、去除AI写作痕迹。
+  学术写作润色、论文降重、AIGC检测、AI痕迹消除、降低论文AI率、去除AI写作痕迹、
+  reduce AI detection、academic humanizer、remove AI patterns、de-AI。
 ---
 
 # myAnti-AIGC：中文学术论文降 AIGC 率指南
@@ -191,6 +192,82 @@ python3 <skill-dir>/scripts/aigc_scan.py --compare <原文件> <改写后文件>
 
 ---
 
+## 英文论文降 AIGC 工作流
+
+当用户提交英文文本时，自动切换到英文模式。
+
+### 语言检测
+
+- 包含中文字符 → 中文模式
+- 纯英文 → 英文模式
+- 用户可显式指定 `--lang en` 或 `--lang zh`
+
+### 英文扫描
+
+```bash
+python3 <skill-dir>/scripts/aigc_scan.py <file.txt> --lang en
+python3 <skill-dir>/scripts/aigc_scan.py --compare <before.txt> <after.txt> --lang en
+```
+
+### 英文三轮降重
+
+#### 第一轮：Remove AI Traces (Subtraction)
+
+1. **Kill AI vocabulary** (Tier 1-3, 见 `references/en-replacement-tables.md`)
+2. **Remove filler phrases** — "It is important to note", "In order to", "A growing body of evidence"
+3. **Fix copula avoidance** — "serves as" → "is", "stands as" → "is"
+4. **Remove -ing superficial analyses** — "highlighting", "underscoring", "showcasing"
+5. **Replace em dashes** — ALL em dashes → commas, parentheses, or periods
+6. **Remove significance filler** — "plays a crucial role", "highlights the importance of"
+
+#### 第二轮：Inject Human Characteristics (Addition)
+
+1. **Vary sentence rhythm** — mix short (5-10 words), medium (15-20), long (25-35)
+2. **Use concrete subjects** — "The 40% reduction..." instead of "This finding suggests..."
+3. **Restore classical academic terms** — "percentage of" not "proportion of", "was measured" not "was assessed"
+4. **Add appropriate hedging** — "may suggest" for observational, direct statement for RCTs
+5. **Vary paragraph openings** — not every paragraph starts with broadest generalization
+
+#### 第三轮：Anti-AI Audit (Self-Check)
+
+逐项排查（详细规则见 `references/en-ai-patterns.md`）：
+
+- [ ] Em dashes remaining? (ZERO TOLERANCE)
+- [ ] "This suggests/highlights/indicates" repeated? (vary subjects)
+- [ ] Rule of Three forced? (break into pairs)
+- [ ] Generic positive conclusion? ("The future looks bright" → delete)
+- [ ] Vague attribution? ("Studies have shown" without citation → cite or delete)
+- [ ] Sentence length uniform? (CV < 0.3 → vary)
+- [ ] Abstract noun subjects chained? (use concrete actors)
+- [ ] Filler phrases remaining? (delete all)
+
+### 英文硬约束
+
+| Constraint | Hard Limit |
+|------------|------------|
+| AI high-freq words (Tier 1) | 0 per paragraph |
+| Em dashes | 0 in entire text |
+| Rule of Three | ≤ 1 per paragraph |
+| "This suggests/highlights" openers | ≤ 2 per page |
+| Filler phrases | 0 in entire text |
+| Generic conclusions | 0 in entire text |
+| Vague attribution | 0 in entire text |
+
+### 英文合法学术短语白名单
+
+以下短语在有引用/数据支撑时**不要删除**：
+
+- Notably, ... / Importantly, ... / Interestingly, ...
+- Furthermore, ... / Moreover, ...
+- Prior studies have shown that ...
+- Previous research has demonstrated that ...
+- Evidence suggests that ...
+- Several studies have reported ...
+
+**判断规则：** 后面跟了具体引用或数据 → 保留。只有空泛无支撑的才删除。
+
+---
+
 ## 优先级策略（P0-P3）
 
 ### P0 必做：消除模板化表达
@@ -351,7 +428,14 @@ python3 <skill-dir>/scripts/aigc_scan.py --compare <原文件> <改写后文件>
 
 ## 参考文档
 
+### 中文
 - `references/ai-patterns.md` — 21 种 AI 痕迹识别模式 + 硬约束速查表
 - `references/replacement-tables.md` — 词级/句级/段落级替换表 + 中文 AI 高频词清单 + 成语替换对照表
 - `references/detection-principles.md` — 主流检测器技术原理与弱点
-- `scripts/aigc_scan.py` — 自动化 AI 特征扫描脚本（8 维度）
+
+### 英文
+- `references/en-ai-patterns.md` — English AI patterns (26 content + 49 structural rules)
+- `references/en-replacement-tables.md` — English replacement tables + AI word lists (3-tier)
+
+### 工具
+- `scripts/aigc_scan.py` — 自动化扫描脚本（8 维度，支持 `--lang zh|en` 和 `--compare`）

@@ -2,7 +2,7 @@
 
 [English](README_EN.md) | 中文
 
-降低中文学术论文 AIGC 检测率的 Claude Code Skill。
+降低中英文学术论文 AIGC 检测率的 Claude Code Skill。
 
 基于三个热门开源项目（[aigc-reduce](https://github.com/ydyjya/aigc-reduce)、[humanizer-zh-academic](https://github.com/CJayWong/humanizer-zh-academic)、[thesis-creator](https://github.com/GrammarSense/thesis-creator)）的核心方法论合并而成，针对中文学术写作场景做了整合与优化。
 
@@ -15,7 +15,9 @@
 | 研究报告 | 适配 |
 | 学术博客/评论 | 适配 |
 
-**触发词**：降AIGC率、去AI味、人工润色、humanize、论文降重、AI痕迹消除、降低论文AI率
+**支持语言**：中文 / English
+
+**触发词**：降AIGC率、去AI味、人工润色、humanize、论文降重、AI痕迹消除、降低论文AI率、reduce AI detection、academic humanizer、remove AI patterns、de-AI
 
 ## 安装
 
@@ -69,6 +71,8 @@ your-project/
 > 帮我降低这段论文的AI率
 > 这段文字AIGC检测率太高了，帮我润色一下
 > 去AI味，这是我的论文第三章
+> Help me reduce the AIGC detection rate of this English paper
+> Remove AI patterns from this academic text
 ```
 
 Claude Code 会自动加载 skill 并执行三步流程：
@@ -79,17 +83,20 @@ Claude Code 会自动加载 skill 并执行三步流程：
 ### 2. 手动运行扫描脚本
 
 ```bash
-# 基本用法
+# 中文扫描（默认）
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt
+
+# 英文扫描
+python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --lang en
 
 # JSON 输出（便于程序处理）
 python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --json
 
-# 自定义风险阈值（默认 50）
-python skills/myAnti-AIGC/scripts/aigc_scan.py your_paper.txt --threshold 60
-
-# 改写前后对比（核心功能）
+# 改写前后对比
 python skills/myAnti-AIGC/scripts/aigc_scan.py --compare 原文.txt 改写后.txt
+
+# 英文改写前后对比
+python skills/myAnti-AIGC/scripts/aigc_scan.py --compare before.txt after.txt --lang en
 ```
 
 扫描输出示例：
@@ -211,11 +218,13 @@ myAnti-AIGC/
 │   └── myAnti-AIGC/
 │       ├── SKILL.md             ← 核心指令（Claude 读了才知道怎么干活）
 │       ├── references/
-│       │   ├── ai-patterns.md        ← 21 种 AI 痕迹模式库
-│       │   ├── replacement-tables.md ← 词级/句级/段落级替换表 + AI 高频词清单
-│       │   └── detection-principles.md ← 检测器技术原理（知网 3.0 / 万方 / GPTZero）
+│       │   ├── ai-patterns.md        ← 中文 AI 痕迹模式库（21 种）
+│       │   ├── replacement-tables.md ← 中文替换表 + AI 高频词清单
+│       │   ├── detection-principles.md ← 检测器技术原理（知网 3.0 / 万方 / GPTZero）
+│       │   ├── en-ai-patterns.md     ← 英文 AI 模式库（26 content + 49 structural）
+│       │   └── en-replacement-tables.md ← 英文替换表 + 三级 AI 词汇表
 │       └── scripts/
-│           └── aigc_scan.py     ← 8 维度自动扫描脚本
+│           └── aigc_scan.py     ← 8 维度扫描脚本（支持 zh/en + 前后对比）
 ├── .gitignore
 └── README.md
 ```
@@ -225,11 +234,13 @@ myAnti-AIGC/
 | 文件 | 职责 | 何时被加载 |
 |------|------|-----------|
 | `plugin.json` | 告诉 Claude Code 这里有一个 skill | 系统启动时 |
-| `SKILL.md` | 完整的工作手册：角色、规则、流程、策略 | 用户触发 skill 时 |
-| `ai-patterns.md` | AI 写作特征的识别与改写指南 | 审计阶段按需读取 |
-| `replacement-tables.md` | 替换操作的详细规则和词表 | 第一轮替换时按需读取 |
+| `SKILL.md` | 完整的工作手册：角色、规则、流程、策略（中英双语） | 用户触发 skill 时 |
+| `ai-patterns.md` | 中文 AI 写作特征识别与改写指南 | 中文审计阶段按需读取 |
+| `replacement-tables.md` | 中文替换操作的详细规则和词表 | 中文第一轮替换时按需读取 |
+| `en-ai-patterns.md` | 英文 AI 写作模式库（合并 3 个开源项目） | 英文审计阶段按需读取 |
+| `en-replacement-tables.md` | 英文替换表 + 三级 AI 词汇表 + 合法学术短语白名单 | 英文第一轮替换时按需读取 |
 | `detection-principles.md` | 知网/万方/GPTZero 等检测器的技术原理 | 了解检测逻辑时按需读取 |
-| `aigc_scan.py` | 自动化扫描工具，支持单文件扫描和改写前后对比 | SKILL.md 指令触发时执行 |
+| `aigc_scan.py` | 自动化扫描工具，`--lang zh\|en` + `--compare` | SKILL.md 指令触发时执行 |
 
 ## 扫描维度说明
 
